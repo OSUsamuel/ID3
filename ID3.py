@@ -41,22 +41,6 @@ Calculates the information gain given entropy and conditional entropy
 def information_gain(entropy, conditional_entropy):
     return entropy - conditional_entropy
 
-# Loads the dataset
-iris = load_iris()
-X, y = iris.data, iris.target
-
-train_X, test_X, train_y, test_y = train_test_split(X, y, test_size=0.2, random_state=42)
-
-# Sets up the dataframe
-df = pd.DataFrame(train_X, columns=iris.feature_names)
-for col in df.columns:
-    df[col] = pd.cut(df[col], bins=[i/2 for i in range(0, 20, 1)])
-
-df['target'] = train_y
-
-
-
-
 
 def id3(tree, subset):
     if(len(subset.columns) == 1):
@@ -83,10 +67,6 @@ def id3(tree, subset):
 
     return tree
 
-tree = id3({}, df)
-# print("Printing tree...")
-# print(json.dumps(tree, indent=2))
-#
 
 def inference(tree, value):
     if('leaf' in tree):
@@ -96,14 +76,43 @@ def inference(tree, value):
         if value[tree['node']] in interval:
             return inference(tree['children'][interval], value) 
 
-test_df = pd.DataFrame(test_X, columns=iris.feature_names)
-test_df['target'] = test_y
-values = test_df.iloc[0]
+    best = min(tree['children'].keys(), key=lambda iv: min(abs(iv.left - value[tree['node']].mid), abs(iv.right - value[tree['node']].mid)))
+    return inference(tree['children'][best], value)
 
-predicted = np.ones(len(test_df)) * -1
-for index, row in test_df.drop(columns=['target']).iterrows():
-    if inference(tree, row) == None:
-        print(row)
+if __name__ == "__main__":
+    # Loads the dataset
+    iris = load_iris()
+    X, y = iris.data, iris.target
+
+    train_X, test_X, train_y, test_y = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    # Sets up the dataframe
+    df = pd.DataFrame(train_X, columns=iris.feature_names)
+
+    bin_edges = {}
+    for col in df.columns:
+        df[col], edges = pd.cut(df[col], bins=[i/2 for i in range(0, 20, 1)], retbins=True)
+        bin_edges[col]  = edges
+
+    df['target'] = train_y
+
+    tree = id3({}, df)
+
+    test_df = pd.DataFrame(test_X, columns=iris.feature_names)
+    test_df['target'] = test_y
 
 
+    for col in test_df.columns:
+        if col != 'target':
+            clipped = np.clip(test_df[col], bin_edges[col][0], bin_edges[col][-1])
+            test_df[col] = pd.cut(clipped, bins=bin_edges[col])
 
+
+    print(test_df)
+
+    predicted = np.ones(len(test_df)) * -1
+    for index, row in test_df.drop(columns=['target']).iterrows():
+        predicted[index] = inference(tree, row)
+
+    print(predicted)
+    print(test_df['target'].to_numpy() - predicted)
